@@ -1,0 +1,27 @@
+name: Build and test
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  streaming-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.2.6 pytest==8.3.5
+      - run: python -m pytest tests -q
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - run: dotnet run --project tests/CaptionChecks -c Release
+      - run: dotnet run --project tests/LayoutProbe -c Release -- artifacts/layout
+      - shell: pwsh
+        run: ./scripts/Build.ps1 -SelfContained
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiveSubtitles-windows-x64
+          path: dist/LiveSubtitles/

@@ -1,0 +1,25 @@
+name: Release Windows build
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - run: dotnet run --project tests/CaptionChecks -c Release
+      - shell: pwsh
+        run: |
+          ./scripts/Build.ps1 -SelfContained
+          Compress-Archive -Path dist/LiveSubtitles/* -DestinationPath LiveSubtitles-windows-x64.zip
+      - shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME LiveSubtitles-windows-x64.zip --draft --generate-notes

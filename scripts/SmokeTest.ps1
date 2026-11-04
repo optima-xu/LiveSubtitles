@@ -1,8 +1,10 @@
-param([Parameter(Mandatory=$true)][string]$WaveFile,[int]$Repeats=1,[string]$AsrUrl='ws://127.0.0.1:17861/asr',[string]$OllamaUrl='http://127.0.0.1:11436')
+param([Parameter(Mandatory=$true)][string]$WaveFile,[Parameter(Mandatory=$true)][string]$SettingsFile,[int]$Repeats=1)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $wave=[IO.Path]::GetFullPath($WaveFile)
+$settings=[IO.Path]::GetFullPath($SettingsFile)
 if(-not(Test-Path -LiteralPath $wave)){throw 'Wave file not found.'}
-# Both services must already be running. This probe sends a supplied file in real time; it does not play it.
-& dotnet run --project (Join-Path $root 'tests\IntegrationProbe') -c Release -- $wave $Repeats $AsrUrl $OllamaUrl
-if($LASTEXITCODE -ne 0){throw 'Live ASR/translation smoke test failed. Inspect the printed events.'}
+if(-not(Test-Path -LiteralPath $settings)){throw 'Settings file not found. Run Install.cmd first.'}
+# Starts/reuses one Ollama instance and supplies audio at playback speed without playing it.
+& dotnet run --project (Join-Path $root 'tests\IntegrationProbe') -c Release -- --managed $root $settings $wave $Repeats
+if($LASTEXITCODE -ne 0){throw 'ASR/translation test failed. Inspect the printed events.'}

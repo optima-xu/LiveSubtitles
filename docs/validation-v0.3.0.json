@@ -1,0 +1,60 @@
+{
+  "version": "0.3.0",
+  "date": "2026-11-04",
+  "platform": "Windows x64",
+  "gpu": "NVIDIA RTX 5060 Laptop, 8151 MiB",
+  "ollama": "0.32.0",
+  "input_method": "PCM16 mono 16 kHz file, delivered in real time at 100 ms intervals after model warm-up",
+  "streaming_test": {
+    "summary": true,
+    "passed": true,
+    "sampleSeconds": 28.189,
+    "repeats": 2,
+    "partials": 42,
+    "finals": 10,
+    "translated": 10,
+    "streamingTranslations": 142,
+    "firstPartial": 1.8135582,
+    "firstTranslation": 2.1753619,
+    "errors": 0,
+    "gapsFound": 0,
+    "elapsed": 59.3823961
+  },
+  "final_translation_lag_seconds": {
+    "median": 1.5625387500000052,
+    "min": 1.3649771000000008,
+    "max": 2.0363950000000006
+  },
+  "managed_service_auto_language_test": {
+    "summary": true,
+    "passed": true,
+    "sampleSeconds": 10.13775,
+    "repeats": 1,
+    "partials": 8,
+    "finals": 3,
+    "translated": 3,
+    "streamingTranslations": 16,
+    "firstPartial": 1.6299313,
+    "firstTranslation": 1.9936618,
+    "errors": 0,
+    "gapsFound": 0,
+    "elapsed": 11.6381388
+  },
+  "capture_sta": {
+    "seconds": 6.2061266,
+    "packets": 47,
+    "failures": 0
+  },
+  "offline_checks": 37,
+  "layout_checks": [
+    "standard",
+    "large-type",
+    "translation-only"
+  ],
+  "limitations": [
+    "No cold-start or screen-paint latency in timing",
+    "Small English-to-Chinese fixture, not a quality benchmark",
+    "Portable runtime download on a clean machine not executed",
+    "Hours-long stability not executed; GitHub CI status is reported separately by Actions"
+  ]
+}

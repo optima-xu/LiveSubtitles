@@ -11,6 +11,35 @@ using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
 // Optional hardware smoke test. Does not open windows or play sound.
+if (args.Length == 1 && args[0] == "--capture-sta")
+{
+    var result = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            using var capture = new AudioCapture();
+            int packets = 0, failures = 0;
+            var statuses = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var times = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var elapsed = Stopwatch.StartNew();
+            capture.Packet += (_, t) => { Interlocked.Increment(ref packets); if(times.Count < 10) times.Enqueue($"{t:F2}/{elapsed.Elapsed.TotalSeconds:F2}"); };
+            capture.Status += status => { statuses.Enqueue(status); if (status.Contains("不可用") || status.Contains("中断")) Interlocked.Increment(ref failures); };
+            capture.Start("");
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            timer.Tick += async (_, _) => { timer.Stop(); await capture.StopAsync(); frame.Continue = false; };
+            timer.Start();
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+            Console.WriteLine(JsonSerializer.Serialize(new { captureSta = true, packets, failures, seconds = elapsed.Elapsed.TotalSeconds, statuses = statuses.ToArray(), times = times.ToArray() }));
+            result.SetResult(packets >= 40 && failures == 0 ? 0 : 1);
+        }
+        catch (Exception ex) { Console.WriteLine(ex.Message); result.SetResult(1); }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    return await result.Task;
+}
 await using var services = args.Length >= 4 && args[0] == "--managed" ? new ServiceManager(Path.GetFullPath(args[1])) : null;
 Settings? managedSettings = null;
 if (services != null)
@@ -52,7 +81,7 @@ if (args.Length == 1 && args[0] == "--capture")
     }));
     return packets > 20 && ordered ? 0 : 1;
 }
-if (args.Length < 1) { Console.WriteLine("Usage: IntegrationProbe audio.wav [repeats] [asrUrl] [ollamaUrl], or --capture"); return 2; }
+if (args.Length < 1) { Console.WriteLine("Usage: IntegrationProbe --managed appRoot settings.json audio.wav [repeats], or --capture"); return 2; }
 using var input = new AudioFileReader(args[0]);
 ISampleProvider source = input;
 if (source.WaveFormat.Channels == 2) source = new StereoToMonoSampleProvider(source);
@@ -69,7 +98,7 @@ while ((count = source.Read(floats, 0, floats.Length)) > 0)
         all.Add((byte)(v >> 8));
     }
 int repeats = args.Length > 1 ? int.Parse(args[1]) : 1;
-var settings = managedSettings ?? new Settings { AsrUrl = args.Length > 2 ? args[2] : "ws://127.0.0.1:17861/asr", OllamaUrl = args.Length > 3 ? args[3] : "http://127.0.0.1:11436" };
+var settings = managedSettings ?? Settings.Load();
 var gate = new object();
 var rows = new Dictionary<long, AsrEvent>();
 var translated = new HashSet<long>();

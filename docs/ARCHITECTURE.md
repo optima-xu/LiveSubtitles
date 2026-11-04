@@ -1,50 +1,17 @@
-# Architecture and protocol
+# Native Windows pipeline
 
-The Windows client uses WPF and NAudio. Audio capture and resampling run independently from inference. A bounded queue sends 16 kHz mono PCM16 little-endian audio to a local WebSocket server. The Python service performs Silero VAD and Qwen online recognition. The client sends source hypotheses to Ollama and renders actual streamed text.
+`AudioCapture` owns WASAPI loopback capture on its worker thread, resamples to mono PCM16 at 16 kHz and sends roughly 100 ms packets. Device changes and capture interruptions mark gaps. `AsrClient` has separate segmentation and inference tasks, so model latency cannot block capture.
 
-## WebSocket
+`SileroVad` runs the pinned Silero 6.2 ONNX model on CPU through ONNX Runtime with one intra-op/inter-op thread. Each call contains 512 new samples plus 64 samples of context, with a recurrent state shaped `[2,1,128]`. Silence does not schedule recognition. A discontinuity resets the VAD, input remainder and pending inference generation.
 
-Default endpoint: `ws://127.0.0.1:17861/asr`.
+`AsrSegmenter` retains 288 ms of pre-roll. It emits a complete current audio window after each additional second of audio, ends a segment after approximately 608 ms of non-speech, and rolls continuous speech at 12 seconds with 800 ms overlap. Every request carries a monotonically increasing segment and revision. `AsrWorkQueue` replaces a queued draft with the newest revision, preserves finals in chronological order and exposes overflow. The input queue holds at most 30 packets and inference queue at most eight windows. Dropped ranges produce visible gap events.
 
-Start with JSON:
+`AsrProtocol` makes mono PCM16 WAV data and sends it in the `images` field of Ollama `/api/chat`, which the Qwen3-ASR audio projector decodes. The pinned ASR template uses a system message only to prefill `language <name><asr_text>` for a forced source language; automatic mode leaves it empty. Metadata and special tokens are removed from responses. Recognition uses whole-window requests with `stream:false`; the application streams audio continuously and repeatedly revises the source hypothesis. There is no persistent acoustic KV cache. It does not concatenate token deltas from independent windows. At rollover, a matching suffix/prefix of at least two text tokens is removed.
 
-```json
-{"type":"start","session_id":"unique-per-start","language":"English","chunk_seconds":1.0}
-```
+`TranslationService` retains its streaming HTTP client, revision cancellation and bounded scheduler. `TranslationPrompt` uses HY-MT2's single-user translation instructions, optional glossary and up to three earlier final segments as context. Its official Unicode chat markers are in `resources/Hy-MT2.Modelfile`. Source-language selection is an ASR hint; target-language IDs map to full names through `LanguageCatalog`.
 
-Wait for `ready`. Each binary audio packet has a 24-byte header followed by PCM16:
+The WPF dispatcher applies ASR/translation events. `CaptionRules` rejects old sessions and incompatible revisions. Source drafts may change. An earlier translation remains visible only when its source is a compatible prefix, and can never overwrite a later accepted translation. History retains at most 5000 rows. SRT/TXT preserve timing and mark unfinished or missing material.
 
-| Offset | Type | Meaning |
-|---|---|---|
-| 0 | uint64 LE | Sequence number, starting at zero |
-| 8 | uint64 LE | Cumulative sample index |
-| 16 | float64 LE | Start time in seconds relative to capture session |
-| 24 | PCM16 LE | Audio samples, commonly 100 ms |
+`ServiceManager` starts at most one Windows Ollama process when the configured endpoint is unavailable. It checks the minimum version, both installed model names and VAD asset, then warms recognition and translation before capture starts. It prefers the executable recorded by the installer, then the portable runtime, installed Ollama, or PATH. Both models can remain loaded; each model accepts one request at a time. GPU memory consumption is measured, not a hard cap. Pause cancels capture/inference and discards queued drafts; stop/exit terminates only processes the application started. Existing external services remain externally owned.
 
-A discontinuity in sequence or sample position resets recognition state and emits a visible `gap` event. Queue overflow is never reported as lossless processing.
-
-Result:
-
-```json
-{"type":"asr","session_id":"s","segment_id":1,"revision":3,"text":"The model works.","final":false,"start":0.1,"end":2.4}
-```
-
-The source text is a complete hypothesis for its current segment, not an append-only delta. Translation requests capture the source revision. A result for an incompatible source revision, stopped session or older rendered translation is discarded. Compatible source-prefix translations may remain visible until replaced.
-
-`{"type":"stop"}` flushes the server. Closing the socket cancels that stream. Client pause/clear invalidates the session before any late results can enter the new session.
-
-## Resources and startup
-
-One ASR stream and one translation request are processed at a time. ASR state rolls at silence or a 12-second bound. Long-running audio does not accumulate into an unbounded Qwen input. vLLM uses a fixed 256 MiB KV cache, a single-audio profiling limit and eager Triton attention. The 30% initialization setting is not a total GPU memory cap: explicit KV allocation bypasses automatic cache sizing. Model weights and temporary tensors need additional memory. This was selected after testing both models together on an 8 GiB laptop GPU.
-
-The ASR health endpoint reports `loading`, `ready` or `error`. The app connects only after readiness. Models are prewarmed before capture. Runtime dependencies are pinned in `server/requirements-linux.lock.txt`; Windows dependencies use `packages.lock.json`.
-
-Local ASR startup uses offline Hugging Face mode and requires installed weights. The owning client generates a random control token. On stop/exit, a token-protected loopback endpoint terminates only the ASR service's dedicated Linux process group; the client also closes only Windows services it started. Reused external services remain running.
-
-## Timestamps
-
-Audio timestamps originate on Windows. ASR and translation results carry those positions back. UI latency compares them with the same Windows monotonic clock; timestamps from separate operating systems are not directly subtracted. VAD determines approximate source segment bounds. SRT is sentence-level, not word-aligned.
-
-## Privacy and storage
-
-Services bind to loopback. Runtime/model paths are per-installation configuration and are not tracked by Git. Transcript history is held in memory until the user exports it. Diagnostic logs contain status/errors and timing, not transcript text. External endpoint configuration is an explicit advanced setting; local defaults do not upload audio to a cloud model.
+`Install.ps1` verifies fixed SHA256 and size for each model and optional Windows Ollama archive. It imports the ASR decoder plus projector with Ollama's blob/create APIs, and imports HY-MT2 with its Modelfile. Downloads are retained for retry/reinstall, so disk use includes both source GGUFs and Ollama blobs. Settings are written only after imports succeed; UI preferences survive repeat installation. Legacy service fields are ignored by the application and removed when saving/installing. No Python interpreter, Linux service, local WebSocket server or extra ASR port is needed.

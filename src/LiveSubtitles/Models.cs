@@ -12,12 +12,10 @@ public sealed class Settings
     public string DeviceId { get; set; } = "";
     public string SourceLanguage { get; set; } = "English";
     public string TargetLanguage { get; set; } = "简体中文";
-    public string AsrUrl { get; set; } = "ws://127.0.0.1:17861/asr";
     public string OllamaUrl { get; set; } = "http://127.0.0.1:11436";
-    public string TranslationModel { get; set; } = "qwen3.5:4b-q4_K_M";
-    public string AsrModel { get; set; } = "Qwen/Qwen3-ASR-0.6B";
-    public string WslDistribution { get; set; } = "Ubuntu-24.04";
-    public string WslRuntimeDirectory { get; set; } = "/opt/live-subtitles";
+    public string OllamaExecutable { get; set; } = "";
+    public string TranslationModel { get; set; } = TranslationPrompt.DefaultModel;
+    public string AsrModel { get; set; } = AsrProtocol.DefaultModel;
     public string RuntimeDirectory { get; set; } = "";
     public string Glossary { get; set; } = "";
     public double FontSize { get; set; } = 26;
@@ -40,7 +38,11 @@ public sealed class Settings
         {
             var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(Path.Combine(Paths.Data, "settings.json")));
             if (s != null && !string.IsNullOrWhiteSpace(s.RuntimeDirectory))
+            {
+                if (s.AsrModel.StartsWith("Qwen/", StringComparison.OrdinalIgnoreCase))
+                    s.AsrModel = AsrProtocol.DefaultModel;
                 return s;
+            }
         }
         catch { }
         var config = new Settings();

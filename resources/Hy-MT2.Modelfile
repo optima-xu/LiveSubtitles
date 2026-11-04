@@ -1,0 +1,13 @@
+# Official Tencent Hy-MT2-1.8B Q8_0 weights; downloaded and SHA256 checked by Install.ps1.
+FROM ./Hy-MT2-1.8B-Q8_0.gguf
+# Port of the official chat_template.jinja. Preserve these Unicode control tokens exactly.
+# https://huggingface.co/tencent/Hy-MT2-1.8B/blob/main/chat_template.jinja
+TEMPLATE """<｜hy_begin▁of▁sentence｜>{{ if .System }}{{ .System }}<｜hy_place▁holder▁no▁3｜>{{ end }}{{ range .Messages }}{{ if eq .Role "user" }}<｜hy_User｜>{{ .Content }}{{ else if eq .Role "assistant" }}<｜hy_Assistant｜>{{ .Content }}<｜hy_place▁holder▁no▁2｜>{{ end }}{{ end }}<｜hy_Assistant｜>"""
+PARAMETER stop "<｜hy_place▁holder▁no▁2｜>"
+PARAMETER stop "<｜hy_place▁holder▁no▁8｜>"
+PARAMETER temperature 0.7
+PARAMETER top_p 0.6
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.05
+PARAMETER num_ctx 2048
+PARAMETER num_predict 256

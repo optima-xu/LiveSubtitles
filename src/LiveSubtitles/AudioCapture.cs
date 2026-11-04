@@ -10,7 +10,6 @@ using NAudio.Wave.SampleProviders;
 namespace LiveSubtitles;
 public sealed class AudioCapture : IDisposable
 {
-    private readonly MMDeviceEnumerator enumerator = new();
     private WasapiLoopbackCapture? capture;
     private MMDevice? device;
     private BufferedWaveProvider? buffer;
@@ -44,7 +43,8 @@ public sealed class AudioCapture : IDisposable
     {
         if (!string.IsNullOrEmpty(requestedId))
             return requestedId;
-        using var d = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+        using var enumerator = new MMDeviceEnumerator();
+        var d = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
         return d.ID;
     }
     public void Start(string id)
@@ -52,14 +52,18 @@ public sealed class AudioCapture : IDisposable
         requestedId = id;
         watch.Restart();
         lastEnd = 0;
-        OpenDevice();
         cts = new();
-        pump = Task.Run(() => Pump(cts.Token));
+        pump = Task.Run(async () =>
+        {
+            try { await Pump(cts.Token); }
+            finally { CloseDevice(); }
+        });
     }
     private void OpenDevice()
     {
         CloseDevice();
         activeId = DesiredId();
+        using var enumerator = new MMDeviceEnumerator();
         device = enumerator.GetDevice(activeId);
         capture = new WasapiLoopbackCapture(device);
         buffer = new BufferedWaveProvider(capture.WaveFormat) { BufferDuration = TimeSpan.FromSeconds(2), DiscardOnBufferOverflow = false, ReadFully = false };
@@ -67,7 +71,9 @@ public sealed class AudioCapture : IDisposable
         if (source.WaveFormat.Channels > 1)
             source = new MonoMix(source);
         resampler = new WdlResamplingSampleProvider(source, 16000);
-        capture.DataAvailable += (_, e) => { lock (gate) { if (buffer == null) return; try { buffer.AddSamples(e.Buffer, 0, e.BytesRecorded); } catch { buffer.ClearBuffer(); Gap?.Invoke(lastEnd, watch.Elapsed.TotalSeconds, "采集缓冲区溢出"); } lastInput = DateTime.UtcNow; } };
+        // Some loopback devices send empty callbacks while idle. They must not
+        // suppress the silence packets that allow VAD to finalize a subtitle.
+        capture.DataAvailable += (_, e) => { lock (gate) { if (buffer == null || e.BytesRecorded <= 0) return; try { buffer.AddSamples(e.Buffer, 0, e.BytesRecorded); } catch { buffer.ClearBuffer(); Gap?.Invoke(lastEnd, watch.Elapsed.TotalSeconds, "采集缓冲区溢出"); } lastInput = DateTime.UtcNow; } };
         capture.RecordingStopped += (_, e) => { if (e.Exception != null) { Log.Write("Capture: " + e.Exception.Message); Status?.Invoke("音频设备中断，正在重新连接"); activeId = ""; } };
         lastInput = DateTime.UtcNow;
         capture.StartRecording();
@@ -85,12 +91,12 @@ public sealed class AudioCapture : IDisposable
                 if (DateTime.UtcNow >= nextDeviceCheck)
                 {
                     nextDeviceCheck = DateTime.UtcNow.AddSeconds(1);
-                    if (DesiredId() != activeId || device?.State != DeviceState.Active)
+                    if (device == null || DesiredId() != activeId)
                     {
                         var start = lastEnd;
                         OpenDevice();
                         pcm.Clear();
-                        Gap?.Invoke(start, watch.Elapsed.TotalSeconds, "音频设备重新连接");
+                        if (start > 0) Gap?.Invoke(start, watch.Elapsed.TotalSeconds, "音频设备重新连接");
                     }
                 }
                 int count = 0;
@@ -175,7 +181,6 @@ public sealed class AudioCapture : IDisposable
     {
         cts?.Cancel();
         CloseDevice();
-        enumerator.Dispose();
     }
     private sealed class MonoMix(ISampleProvider input) : ISampleProvider
     {

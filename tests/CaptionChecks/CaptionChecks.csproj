@@ -8,5 +8,9 @@
   <ItemGroup>
     <Compile Include="../../src/LiveSubtitles/CaptionRules.cs" Link="CaptionRules.cs" />
     <Compile Include="../../src/LiveSubtitles/Models.cs" Link="Models.cs" />
+    <Compile Include="../../src/LiveSubtitles/TranslationPrompt.cs" Link="TranslationPrompt.cs" />
+    <Compile Include="../../src/LiveSubtitles/LanguageCatalog.cs" Link="LanguageCatalog.cs" />
+    <Compile Include="../../src/LiveSubtitles/AsrProtocol.cs" Link="AsrProtocol.cs" />
+    <Compile Include="../../src/LiveSubtitles/AsrSegmenter.cs" Link="AsrSegmenter.cs" />
   </ItemGroup>
 </Project>

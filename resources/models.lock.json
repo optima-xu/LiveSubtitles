@@ -1,0 +1,33 @@
+{
+  "asr": {
+    "model": "qwen3-asr:0.6b-q8_0",
+    "repository": "ggml-org/Qwen3-ASR-0.6B-GGUF",
+    "revision": "928ab958557df9aa2ef1c93e0e83c7ad0933fae2",
+    "files": [
+      { "filename": "Qwen3-ASR-0.6B-Q8_0.gguf", "size_bytes": 804749248, "sha256": "bca259818b50ca7c4c05e9bdb35a5dc04fa039653a6d6f3f0f331f96f6aa1971" },
+      { "filename": "mmproj-Qwen3-ASR-0.6B-Q8_0.gguf", "size_bytes": 214392480, "sha256": "41a342b5e4c514e968cb756de6cd1b7be39eff43c44c57a2ef5fc6522e36603d" }
+    ]
+  },
+  "translation": {
+    "model": "hy-mt2:1.8b-q8_0",
+    "repository": "tencent/Hy-MT2-1.8B-GGUF",
+    "revision": "a0c709d9fac510f2c807aa3af52872340dc37a4a",
+    "filename": "Hy-MT2-1.8B-Q8_0.gguf",
+    "sha256": "5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4",
+    "size_bytes": 1908528192
+  },
+  "vad": {
+    "version": "6.2",
+    "revision": "be95df9152c0d7618fa1edfeb296fc3dae32376f",
+    "url": "https://raw.githubusercontent.com/snakers4/silero-vad/be95df9152c0d7618fa1edfeb296fc3dae32376f/src/silero_vad/data/silero_vad.onnx",
+    "filename": "silero_vad.onnx",
+    "size_bytes": 2327524,
+    "sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"
+  },
+  "ollama": {
+    "version": "0.32.0",
+    "url": "https://github.com/ollama/ollama/releases/download/v0.32.0/ollama-windows-amd64.zip",
+    "size_bytes": 1503047573,
+    "sha256": "56561a8f0a904483303c610e61af61c5a7b6f5496ce3707e207d25d4ff67b89e"
+  }
+}

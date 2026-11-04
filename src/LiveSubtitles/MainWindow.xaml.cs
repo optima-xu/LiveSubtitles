@@ -49,7 +49,9 @@ public partial class MainWindow : Window
         Closing += async (_, e) => { if (closing) return; e.Cancel = true; await ExitAsync(); };
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) { Hide(); tray.Visible = true; } };
         tray.Text = "实时翻译字幕";
-        tray.Icon = System.Drawing.SystemIcons.Application;
+        using (var resource = Application.GetResourceStream(new Uri("pack://application:,,,/LiveSubtitles;component/Assets/livesubtitles.ico"))!.Stream)
+        using (var icon = new System.Drawing.Icon(resource))
+            tray.Icon = (System.Drawing.Icon)icon.Clone();
         tray.Visible = true;
         tray.DoubleClick += (_, _) => Ui(() => { Show(); WindowState = WindowState.Normal; Activate(); });
         var menu = new Forms.ContextMenuStrip();
@@ -62,13 +64,17 @@ public partial class MainWindow : Window
         monitor.Tick += async (_, _) => { if (reconnect && running && !starting && !stopping) { reconnect = false; AddGap("识别服务中断，重新连接", timeline.Elapsed.TotalSeconds, timeline.Elapsed.TotalSeconds); await StopAsync("正在重新连接"); int expected = controlEpoch; await Task.Delay(1000); if (!closing && controlEpoch == expected) await StartAsync(); } overlay.EnsureVisible(); };
         monitor.Start();
         SystemEvents.PowerModeChanged += PowerChanged;
-        Loaded += (_, _) => SetStatus("就绪。先播放电脑音频，再点击开始。");
+        Loaded += (_, _) => SetStatus("请先点击“开始”，等待就绪后再播放电脑音频。");
     }
     private void LoadControls()
     {
         RefreshDevices(this, new RoutedEventArgs());
-        SourceBox.SelectedIndex = settings.SourceLanguage == "Chinese" ? 1 : settings.SourceLanguage == "Auto" ? 2 : 0;
-        TargetBox.SelectedIndex = settings.TargetLanguage == "English" ? 2 : settings.TargetLanguage == "繁體中文" ? 1 : 0;
+        SourceBox.ItemsSource = LanguageCatalog.Sources;
+        TargetBox.ItemsSource = LanguageCatalog.Targets;
+        SourceBox.SelectedValue = settings.SourceLanguage;
+        TargetBox.SelectedValue = settings.TargetLanguage;
+        if (SourceBox.SelectedIndex < 0) SourceBox.SelectedValue = "Auto";
+        if (TargetBox.SelectedIndex < 0) TargetBox.SelectedValue = "简体中文";
         FontSlider.Value = settings.FontSize;
         OpacitySlider.Value = settings.BackgroundOpacity;
         BilingualBox.IsChecked = settings.Bilingual;
@@ -79,8 +85,8 @@ public partial class MainWindow : Window
     private void ReadControls()
     {
         settings.DeviceId = (DeviceBox.SelectedItem as AudioDevice)?.Id ?? "";
-        settings.SourceLanguage = (SourceBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "English";
-        settings.TargetLanguage = (TargetBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "简体中文";
+        settings.SourceLanguage = SourceBox.SelectedValue as string ?? "Auto";
+        settings.TargetLanguage = TargetBox.SelectedValue as string ?? "简体中文";
         settings.Save();
     }
     private void Ui(Action action)
@@ -369,7 +375,7 @@ public partial class MainWindow : Window
         }
         new SettingsWindow(settings) { Owner = this }.ShowDialog();
     }
-    private void HelpClick(object s, RoutedEventArgs e) => System.Windows.MessageBox.Show(this, "1. 首次使用先运行项目的 Install.ps1。\n2. 播放电脑声音，选择输出设备，点击开始。\n3. Ctrl+Alt+Space 开始/暂停，Ctrl+Alt+L 锁定/解锁，Ctrl+Alt+H 显示/隐藏字幕。\n4. 字幕草稿会随上下文修正；历史可以复制或导出。\n\n模型与运行目录可在高级设置中调整。缺失、超时和未定稿内容会在记录中标明。", "使用说明");
+    private void HelpClick(object s, RoutedEventArgs e) => System.Windows.MessageBox.Show(this, "1. 首次使用先运行项目的 Install.ps1。\n2. 选择输出设备，点击“开始”，等待就绪后再播放电脑音频。\n3. Ctrl+Alt+Space 开始/暂停，Ctrl+Alt+L 锁定/解锁，Ctrl+Alt+H 显示/隐藏字幕。\n4. 字幕草稿会随上下文修正；历史可以复制或导出。\n\n模型与运行目录可在高级设置中调整。缺失、超时和未定稿内容会在记录中标明。", "使用说明");
     private void RegisterKeys()
     {
         hwnd = new WindowInteropHelper(this).Handle;
@@ -415,9 +421,11 @@ public partial class MainWindow : Window
         for (int i = 0; i < 3; i++)
             UnregisterHotKey(hwnd, 910 + i);
         SystemEvents.PowerModeChanged -= PowerChanged;
-        settings.Save();
+        ReadControls();
         overlay.Exit();
+        var trayIcon = tray.Icon;
         tray.Dispose();
+        trayIcon?.Dispose();
         await services.DisposeAsync();
         Application.Current.Shutdown();
     }

@@ -10,9 +10,9 @@ $publishArgs=@('publish',$project,'-c','Release','-r','win-x64','-o',(Join-Path 
 if($LASTEXITCODE -ne 0){throw 'Windows build failed.'}
 $oldSymbols=Join-Path $OutputDirectory 'app\LiveSubtitles.pdb'
 if(Test-Path -LiteralPath $oldSymbols){Remove-Item -LiteralPath $oldSymbols}
-New-Item -ItemType Directory -Force -Path (Join-Path $OutputDirectory 'server'),(Join-Path $OutputDirectory 'scripts') | Out-Null
-Get-ChildItem -LiteralPath (Join-Path $repoRoot 'server') -File | Copy-Item -Destination (Join-Path $OutputDirectory 'server') -Force
-foreach($name in 'Install.ps1','Start.ps1','Install.cmd','Start.cmd','README.md','TESTING.md','CONTRIBUTING.md','LICENSE','THIRD_PARTY_NOTICES.md'){
+New-Item -ItemType Directory -Force -Path (Join-Path $OutputDirectory 'resources'),(Join-Path $OutputDirectory 'scripts') | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $repoRoot 'resources') -File | Copy-Item -Destination (Join-Path $OutputDirectory 'resources') -Force
+foreach($name in 'Install.ps1','Start.ps1','Install.cmd','Start.cmd','README.md','README.zh-CN.md','TESTING.md','CONTRIBUTING.md','LICENSE','THIRD_PARTY_NOTICES.md'){
     if(Test-Path -LiteralPath (Join-Path $repoRoot $name)){Copy-Item -LiteralPath (Join-Path $repoRoot $name) -Destination (Join-Path $OutputDirectory $name) -Force}
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Diagnose.ps1') -Destination (Join-Path $OutputDirectory 'scripts\Diagnose.ps1') -Force

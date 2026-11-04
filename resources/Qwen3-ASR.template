@@ -1,0 +1,4 @@
+{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+{{ if .System }}language {{ .System }}<asr_text>{{ end }}{{ .Response }}<|im_end|>

@@ -33,13 +33,10 @@ public sealed class SettingsWindow : Window
             panel.Children.Add(box);
             return box;
         }
-        var asr = Field("识别服务地址", s.AsrUrl);
-        var ollama = Field("Ollama 地址", s.OllamaUrl);
+        var ollama = Field("Ollama 地址（识别与翻译共用）", s.OllamaUrl);
         var mt = Field("翻译模型", s.TranslationModel);
         var model = Field("识别模型（更改后请退出并重新启动）", s.AsrModel);
-        var distro = Field("WSL 发行版", s.WslDistribution);
         var runtime = Field("运行环境与模型目录", s.RuntimeDirectory);
-        var linuxRuntime = Field("WSL 内的依赖目录", s.WslRuntimeDirectory);
         var glossary = Field("术语对照（每行一个，例如：gradient descent = 梯度下降）", s.Glossary, 72);
         ComboBox KeyField(string label, int selected)
         {
@@ -63,22 +60,16 @@ public sealed class SettingsWindow : Window
         {
             try
             {
-                var a = new Uri(asr.Text.Trim());
                 var o = new Uri(ollama.Text.Trim());
-                if (a.Scheme != "ws" && a.Scheme != "wss")
-                    throw new Exception("识别地址需要以 ws:// 或 wss:// 开头。");
                 if (o.Scheme != "http" && o.Scheme != "https")
                     throw new Exception("Ollama 地址需要以 http:// 或 https:// 开头。");
                 int k0 = (int)startKey.SelectedValue, k1 = (int)lockKey.SelectedValue, k2 = (int)showKey.SelectedValue;
                 if (k0 == k1 || k0 == k2 || k1 == k2)
                     throw new Exception("快捷键不能重复。");
-                s.AsrUrl = a.ToString();
                 s.OllamaUrl = o.ToString().TrimEnd('/');
                 s.TranslationModel = mt.Text.Trim();
                 s.AsrModel = model.Text.Trim();
-                s.WslDistribution = distro.Text.Trim();
                 s.RuntimeDirectory = Path.GetFullPath(runtime.Text.Trim());
-                s.WslRuntimeDirectory = linuxRuntime.Text.Trim();
                 s.Glossary = glossary.Text.Trim();
                 s.StartHotkey = k0;
                 s.LockHotkey = k1;

@@ -12,6 +12,7 @@ runtime-path.txt
 *.log
 *.safetensors
 *.gguf
+*.onnx
 *.wav
 *.mp3
 .vs/

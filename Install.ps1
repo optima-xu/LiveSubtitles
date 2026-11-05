@@ -1,10 +1,17 @@
 param(
     [string]$RuntimeDirectory,
     [string]$OllamaExecutable,
-    [int]$OllamaPort=11436
+    [int]$OllamaPort=11436,
+    [string]$ApplicationDirectory
 )
 $ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
+if($ApplicationDirectory){
+    # A wizard started from PowerShell 7 can inherit its modules ahead of Windows PowerShell's.
+    $env:PSModulePath=(Join-Path $PSHOME 'Modules')+[IO.Path]::PathSeparator+$env:PSModulePath
+    # Setup captures UTF-8 output, including Windows PowerShell's localized errors.
+    [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
+}
 function Require-Success([string]$Message){if($LASTEXITCODE -ne 0){throw $Message}}
 function Test-Asset([string]$Path,[long]$Size,[string]$Hash){
     return (Test-Path -LiteralPath $Path) -and (Get-Item -LiteralPath $Path).Length -eq $Size -and (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Hash
@@ -19,13 +26,17 @@ function Get-Asset([string]$Url,[string]$Path,[long]$Size,[string]$Hash){
         Remove-Item -LiteralPath $partial
     }
     Write-Host "Downloading $([IO.Path]::GetFileName($Path)) ($([Math]::Round($Size/1MB)) MB)..."
-    & curl.exe --fail --location --retry 3 --retry-all-errors --continue-at - --output $partial $Url
-    Require-Success 'Download failed. Rerun Install.cmd to resume.'
+    $displayArguments=@()
+    if($ApplicationDirectory){$displayArguments=@('--silent','--show-error')}
+    & curl.exe @displayArguments --fail --location --retry 3 --retry-all-errors --continue-at - --output $partial $Url
+    Require-Success 'Download failed. Run setup again to resume.'
     if(-not(Test-Asset $partial $Size $Hash)){throw "Integrity check failed: $partial. The file was not installed."}
     Move-Item -LiteralPath $partial -Destination $Path -Force
 }
 function Get-OllamaVersion([string]$Path){
     if(-not $Path -or -not(Test-Path -LiteralPath $Path)){return [version]'0.0.0'}
+    # Some versions report an inactive service on stderr before printing the client version.
+    $ErrorActionPreference='Continue'
     $output=(& $Path --version 2>&1 | Out-String)
     $matches=[regex]::Matches($output,'\d+\.\d+\.\d+')
     if($matches.Count){return [version]$matches[$matches.Count-1].Value}
@@ -39,12 +50,15 @@ function Import-Blob([string]$Path,[string]$Hash){
     $url="$script:ollamaUrl/api/blobs/sha256:$Hash"
     try{Invoke-WebRequest -Uri $url -Method Head -UseBasicParsing -TimeoutSec 10 | Out-Null;return}catch{}
     # --upload-file streams the file instead of allocating multi-GB request bodies.
-    & curl.exe --fail --silent --show-error --request POST --upload-file $Path $url
+    & curl.exe --globoff --fail --silent --show-error --request POST --upload-file $Path $url
     Require-Success "Ollama could not import $Path"
 }
 if($OllamaPort -lt 1024 -or $OllamaPort -gt 65535){throw 'OllamaPort must be between 1024 and 65535.'}
 $appRoot=$PSScriptRoot
-if(-not(Test-Path -LiteralPath (Join-Path $appRoot 'app\LiveSubtitles.exe'))){
+if($ApplicationDirectory){
+    # The setup wizard runs this bundled script before copying the desktop application.
+    $appRoot=[IO.Path]::GetFullPath($ApplicationDirectory)
+}elseif(-not(Test-Path -LiteralPath (Join-Path $appRoot 'app\LiveSubtitles.exe'))){
     if(-not(Test-Path -LiteralPath (Join-Path $appRoot 'src\LiveSubtitles\LiveSubtitles.csproj'))){throw 'The release is incomplete. Extract the entire ZIP first.'}
     $appRoot=Join-Path $PSScriptRoot 'dist\LiveSubtitles'
     & (Join-Path $PSScriptRoot 'scripts\Build.ps1') -OutputDirectory $appRoot -SelfContained
@@ -85,17 +99,38 @@ foreach($file in $lock.asr.files){
 $translation=Join-Path $RuntimeDirectory ('translation-models\'+$lock.translation.filename)
 $translationUrl="https://huggingface.co/$($lock.translation.repository)/resolve/$($lock.translation.revision)/$($lock.translation.filename)"
 Get-Asset $translationUrl $translation $lock.translation.size_bytes $lock.translation.sha256
+# A portable copy can already be serving a different model store on the preferred port.
+if($ApplicationDirectory -and -not $PSBoundParameters.ContainsKey('OllamaPort')){
+    $ports=[Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()
+    if($ports.Port -contains $OllamaPort){
+        $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
+        try{$listener.Start();$OllamaPort=$listener.LocalEndpoint.Port}finally{$listener.Stop()}
+    }
+}
 $oldHost=$env:OLLAMA_HOST;$oldModels=$env:OLLAMA_MODELS;$oldParallel=$env:OLLAMA_NUM_PARALLEL;$oldLoaded=$env:OLLAMA_MAX_LOADED_MODELS
 $script:ollamaUrl="http://127.0.0.1:$OllamaPort"
 $installerService=$null
 try{
     $env:OLLAMA_HOST="127.0.0.1:$OllamaPort"
-    $env:OLLAMA_MODELS=Join-Path $RuntimeDirectory 'ollama-models'
+    # The native GGUF tools can lose non-ASCII characters in absolute command-line paths.
+    # The server works in the selected runtime directory and passes relative paths to them.
+    $env:OLLAMA_MODELS='ollama-models'
     $env:OLLAMA_NUM_PARALLEL='1';$env:OLLAMA_MAX_LOADED_MODELS='2'
     $ready=$false
     try{$version=Invoke-RestMethod "$ollamaUrl/api/version" -TimeoutSec 3;$ready=$true}catch{}
     if(-not $ready){
-        $installerService=Start-Process -FilePath $OllamaExecutable -ArgumentList 'serve' -WindowStyle Hidden -RedirectStandardOutput (Join-Path $RuntimeDirectory 'ollama.out.log') -RedirectStandardError (Join-Path $RuntimeDirectory 'ollama.err.log') -PassThru
+        # Start-Process treats brackets in redirected log paths as wildcards in Windows PowerShell.
+        $startInfo=New-Object Diagnostics.ProcessStartInfo
+        $startInfo.FileName=$OllamaExecutable
+        $startInfo.Arguments='serve'
+        $startInfo.WorkingDirectory=$RuntimeDirectory
+        $startInfo.UseShellExecute=$false
+        $startInfo.CreateNoWindow=$true
+        $startInfo.RedirectStandardOutput=$true
+        $startInfo.RedirectStandardError=$true
+        $installerService=[Diagnostics.Process]::Start($startInfo)
+        $serviceOutput=$installerService.StandardOutput.ReadToEndAsync()
+        $serviceErrors=$installerService.StandardError.ReadToEndAsync()
         for($i=0;$i -lt 45;$i++){
             if($installerService.HasExited){throw 'Ollama exited. Check the runtime logs.'}
             try{$version=Invoke-RestMethod "$ollamaUrl/api/version" -TimeoutSec 2;$ready=$true;break}catch{Start-Sleep -Seconds 1}
@@ -127,7 +162,13 @@ try{
         }
     }
 }finally{
-    if($installerService -and -not $installerService.HasExited){Stop-Process -Id $installerService.Id -ErrorAction SilentlyContinue}
+    if($installerService){
+        if(-not $installerService.HasExited){$installerService.Kill()}
+        $installerService.WaitForExit()
+        [IO.File]::WriteAllText((Join-Path $RuntimeDirectory 'ollama.out.log'),$serviceOutput.GetAwaiter().GetResult())
+        [IO.File]::WriteAllText((Join-Path $RuntimeDirectory 'ollama.err.log'),$serviceErrors.GetAwaiter().GetResult())
+        $installerService.Dispose()
+    }
     $env:OLLAMA_HOST=$oldHost;$env:OLLAMA_MODELS=$oldModels;$env:OLLAMA_NUM_PARALLEL=$oldParallel;$env:OLLAMA_MAX_LOADED_MODELS=$oldLoaded
 }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $settingsPath) | Out-Null
@@ -135,4 +176,5 @@ foreach($name in @('AsrUrl','WslDistribution','WslRuntimeDirectory')){$settings.
 foreach($entry in @{RuntimeDirectory=$RuntimeDirectory;AsrModel=$lock.asr.model;TranslationModel=$lock.translation.model;OllamaUrl=$ollamaUrl;OllamaExecutable=[IO.Path]::GetFullPath($OllamaExecutable)}.GetEnumerator()){$settings | Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value -Force}
 $settings | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $settingsPath -Encoding utf8
 Set-Content -LiteralPath (Join-Path $appRoot 'runtime-path.txt') -Value $RuntimeDirectory -Encoding utf8
-Write-Host "Installed. Open $appRoot\Start.cmd. Click Start and wait until ready before playing audio."
+if($ApplicationDirectory){Write-Host 'Models ready.'}
+else{Write-Host "Installed. Open $appRoot\Start.cmd. Click Start and wait until ready before playing audio."}

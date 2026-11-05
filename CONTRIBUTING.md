@@ -6,6 +6,7 @@ Use Windows x64 and the .NET 9 SDK. Runtime releases are self-contained; develop
 dotnet run --project tests/CaptionChecks -c Release
 dotnet run --project tests/LayoutProbe -c Release -- artifacts/layout
 .\scripts\Build.ps1 -SelfContained
+.\scripts\Build-Installer.ps1 -PayloadDirectory .\dist\LiveSubtitles
 ```
 
 The first command checks session/revision ordering, export, language prompts, WAV transport, VAD-driven segmentation, rollover, gaps and bounded queues without downloading models. `IntegrationProbe` uses real installed models and supplied audio; see TESTING.md. CPU state tests and successful builds are not evidence of GPU inference quality or speed.

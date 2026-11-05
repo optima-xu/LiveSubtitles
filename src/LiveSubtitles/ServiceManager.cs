@@ -41,10 +41,11 @@ public sealed class ServiceManager : IAsyncDisposable
                 exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Ollama", "ollama.exe");
             if (!File.Exists(exe))
                 exe = "ollama.exe";
-            var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
+            var info = new ProcessStartInfo(exe) { WorkingDirectory = s.RuntimeDirectory, UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
             info.ArgumentList.Add("serve");
             info.Environment["OLLAMA_HOST"] = $"127.0.0.1:{uri.Port}";
-            info.Environment["OLLAMA_MODELS"] = Path.Combine(s.RuntimeDirectory, "ollama-models");
+            // Keep runner arguments valid even when the Windows installation path contains Unicode.
+            info.Environment["OLLAMA_MODELS"] = "ollama-models";
             info.Environment["OLLAMA_NUM_PARALLEL"] = "1";
             info.Environment["OLLAMA_MAX_LOADED_MODELS"] = "2";
             Status?.Invoke("正在启动 Ollama…");

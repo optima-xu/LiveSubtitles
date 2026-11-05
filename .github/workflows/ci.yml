@@ -12,7 +12,10 @@ jobs:
       - run: dotnet run --project tests/LayoutProbe -c Release -- artifacts/layout
       - shell: pwsh
         run: ./scripts/Build.ps1 -SelfContained
+      - shell: pwsh
+        run: ./scripts/Build-Installer.ps1 -PayloadDirectory dist/LiveSubtitles
       - uses: actions/upload-artifact@v4
         with:
           name: LiveSubtitles-windows-x64
-          path: dist/LiveSubtitles/
+          path: dist/LiveSubtitles-Setup-*-windows-x64.exe
+          if-no-files-found: error

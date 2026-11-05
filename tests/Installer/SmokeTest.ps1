@@ -43,14 +43,15 @@ function Test-Shortcut([string]$Path) {
     }
 }
 
-function Uninstall-TestCopy {
+function Uninstall-TestCopy([switch]$Purge) {
     $record = Get-ItemProperty -LiteralPath $registration
     if ($record.InstallLocation.TrimEnd('\') -ne $destination) { throw 'Unexpected registered install location.' }
     $uninstaller = $record.UninstallString.Trim('"')
     if ((Split-Path -Parent $uninstaller) -ne $destination -or (Split-Path -Leaf $uninstaller) -notmatch '^unins\d+\.exe$') {
         throw 'Refusing to run an uninstaller outside the test installation.'
     }
-    if ((Invoke-SetupProcess $uninstaller '' 'uninstall.log') -ne 0) { throw 'Uninstall failed.' }
+    $options = if ($Purge) { '/PURGEAPPDATA' } else { '' }
+    if ((Invoke-SetupProcess $uninstaller $options 'uninstall.log') -ne 0) { throw 'Uninstall failed.' }
 }
 
 try {
@@ -123,6 +124,28 @@ try {
         throw 'Uninstall did not preserve the reusable data.'
     }
     Write-Host 'Repeat installation, shortcut opt-out, preference preservation and uninstall passed.'
+    if ((Invoke-SetupProcess $installer $dirOption 'reinstall.log') -ne 0) { throw 'Reinstall after keeping data failed.' }
+    $export = Join-Path $destination 'data\example.srt'
+    [IO.File]::WriteAllText($export,'user export')
+    $outside = [IO.Directory]::CreateDirectory((Join-Path $testRoot 'other software')).FullName
+    $outsideFile = Join-Path $outside 'keep.txt'
+    [IO.File]::WriteAllText($outsideFile,'outside installation')
+    [void](New-Item -ItemType Junction -Path (Join-Path $runtime 'user-link') -Target $outside)
+    $separateExecutable = (Get-Content -LiteralPath $settingsFile -Raw -Encoding utf8 | ConvertFrom-Json).OllamaExecutable
+    Uninstall-TestCopy -Purge
+    foreach ($path in @($registration,$desktop,$startMenu,$target,$settingsFile,(Join-Path $destination 'runtime-path.txt'))) {
+        if (Test-Path -LiteralPath $path) { throw "Full removal left $path" }
+    }
+    $leftovers = @(Get-ChildItem -LiteralPath $runtime -Force | Where-Object Name -ne 'user-link')
+    if ($leftovers.Count) { throw "Full removal left private model data: $($leftovers.FullName -join ', ')" }
+    if ([IO.File]::ReadAllText($export) -ne 'user export' -or [IO.File]::ReadAllText($outsideFile) -ne 'outside installation') {
+        throw 'Full removal damaged unrelated files.'
+    }
+    if (-not $separateExecutable.StartsWith($runtime+'\',[StringComparison]::OrdinalIgnoreCase) -and -not [IO.File]::Exists($separateExecutable)) {
+        throw 'Full removal damaged the pre-existing Ollama installation.'
+    }
+    [IO.Directory]::Delete((Join-Path $runtime 'user-link'),$false)
+    Write-Host 'Full uninstall removed private model files and settings, preserving exports and unrelated files.'
     $success = $true
 } finally {
     if ($busyPort) { $busyPort.Stop() }

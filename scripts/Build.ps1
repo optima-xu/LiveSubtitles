@@ -16,5 +16,6 @@ foreach($name in 'Install.ps1','Start.ps1','Install.cmd','Start.cmd','README.md'
     if(Test-Path -LiteralPath (Join-Path $repoRoot $name)){Copy-Item -LiteralPath (Join-Path $repoRoot $name) -Destination (Join-Path $OutputDirectory $name) -Force}
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Diagnose.ps1') -Destination (Join-Path $OutputDirectory 'scripts\Diagnose.ps1') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Remove-AppData.ps1') -Destination (Join-Path $OutputDirectory 'scripts\Remove-AppData.ps1') -Force
 if(Test-Path -LiteralPath (Join-Path $repoRoot 'docs')){Copy-Item -LiteralPath (Join-Path $repoRoot 'docs') -Destination $OutputDirectory -Recurse -Force}
 Write-Host "Built: $OutputDirectory"

@@ -12,14 +12,14 @@ Repository: [optima-xu/LiveSubtitles](https://github.com/optima-xu/LiveSubtitles
 4. Create a version tag matching the application version, then push it:
 
 ```powershell
-git tag v0.4.1
-git push origin v0.4.1
+git tag v0.4.2
+git push origin v0.4.2
 ```
 
 The release workflow checks the tag/version match, builds the self-contained app and installer, then tests the installer, shortcuts, repeat installation and uninstall on a clean Windows runner. A successful run creates a **draft** GitHub Release containing:
 
-- `LiveSubtitles-Setup-v0.4.1-windows-x64.exe`
-- `LiveSubtitles-v0.4.1-windows-x64.zip`
+- `LiveSubtitles-Setup-v0.4.2-windows-x64.exe`
+- `LiveSubtitles-v0.4.2-windows-x64.zip`
 - `SHA256SUMS.txt`
 
 Run `scripts/Build-Installer.ps1` to make the installer locally. It builds the app and uses a pinned portable Inno Setup compiler under `dist/build-tools`. The normal CI build is model-free. The tagged release test downloads models through the production installer. Check both asset hashes before publishing the draft.

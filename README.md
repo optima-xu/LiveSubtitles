@@ -17,12 +17,12 @@ Live subtitles and translation for audio playing on your Windows PC, displayed i
 
 Requires **64-bit Windows**, internet access for initial setup, and at least **12 GB of free disk space**.
 
-1. Download and open `LiveSubtitles-Setup-v0.4.1-windows-x64.exe` from [Releases](https://github.com/optima-xu/LiveSubtitles/releases/latest).
+1. Download and open `LiveSubtitles-Setup-v0.4.2-windows-x64.exe` from [Releases](https://github.com/optima-xu/LiveSubtitles/releases/latest).
 2. Choose an installation folder, for example `D:\Apps\LiveSubtitles`. On a fresh installation, the models also go into this folder. The desktop shortcut is selected by default.
-3. Click **Install**. The wizard downloads the models and prepares Ollama. Open **LiveSubtitles** from the Start menu or your desktop after setup finishes.
+3. Click **Install**. The wizard shows each model’s download progress and prepares Ollama. You can cancel and resume later in the same folder. After setup, open **LiveSubtitles** from the Start menu or your desktop.
 4. Select the output device and languages. **Click Start / 开始, wait until ready, then play the audio.**
 
-The app interface is in Chinese. To uninstall, open **Settings → Apps → Installed apps**. The uninstaller keeps downloaded models and preferences for reuse.
+The app interface is in Chinese. Uninstall from **Settings → Apps → Installed apps**. Choose whether to keep or delete this installation’s models, settings and logs. Exported subtitles and separately installed Ollama are kept.
 
 ## Contributing
 

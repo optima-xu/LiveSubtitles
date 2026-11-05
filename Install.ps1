@@ -2,7 +2,8 @@ param(
     [string]$RuntimeDirectory,
     [string]$OllamaExecutable,
     [int]$OllamaPort=11436,
-    [string]$ApplicationDirectory
+    [string]$ApplicationDirectory,
+    [string]$ProgressFile
 )
 $ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
@@ -13,10 +14,21 @@ if($ApplicationDirectory){
     [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
 }
 function Require-Success([string]$Message){if($LASTEXITCODE -ne 0){throw $Message}}
+function Set-ModelStatus([string]$Stage,[string]$Item='',[long]$Size=0){
+    if(-not $ProgressFile){return}
+    $line=$Item -replace '[\r\n]+',' '
+    $content="[model]`r`nstage=$Stage`r`nitem=$line`r`nsize=$Size`r`n"
+    [IO.File]::WriteAllText($ProgressFile,$content,[Text.Encoding]::Unicode)
+}
+trap {
+    if($ProgressFile){Set-ModelStatus 'error' $_.Exception.Message; exit 1}
+    break
+}
 function Test-Asset([string]$Path,[long]$Size,[string]$Hash){
     return (Test-Path -LiteralPath $Path) -and (Get-Item -LiteralPath $Path).Length -eq $Size -and (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Hash
 }
 function Get-Asset([string]$Url,[string]$Path,[long]$Size,[string]$Hash){
+    Set-ModelStatus 'verify' ([IO.Path]::GetFileName($Path))
     Write-Host "Checking $([IO.Path]::GetFileName($Path))..."
     if(Test-Asset $Path $Size $Hash){return}
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
@@ -26,10 +38,12 @@ function Get-Asset([string]$Url,[string]$Path,[long]$Size,[string]$Hash){
         Remove-Item -LiteralPath $partial
     }
     Write-Host "Downloading $([IO.Path]::GetFileName($Path)) ($([Math]::Round($Size/1MB)) MB)..."
+    Set-ModelStatus 'download' $partial $Size
     $displayArguments=@()
     if($ApplicationDirectory){$displayArguments=@('--silent','--show-error')}
-    & curl.exe @displayArguments --fail --location --retry 3 --retry-all-errors --continue-at - --output $partial $Url
+    & curl.exe @displayArguments --fail --location --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 3 --retry-all-errors --continue-at - --output $partial $Url
     Require-Success 'Download failed. Run setup again to resume.'
+    Set-ModelStatus 'verify' ([IO.Path]::GetFileName($Path))
     if(-not(Test-Asset $partial $Size $Hash)){throw "Integrity check failed: $partial. The file was not installed."}
     Move-Item -LiteralPath $partial -Destination $Path -Force
 }
@@ -76,16 +90,27 @@ if(-not $OllamaExecutable){
     if($settings.OllamaExecutable){$candidates=@($settings.OllamaExecutable)+$candidates}
     $command=Get-Command ollama.exe -ErrorAction SilentlyContinue
     if($command){$candidates+=$command.Source}
-    foreach($candidate in $candidates){if((Get-OllamaVersion $candidate) -ge [version]$lock.ollama.version){$OllamaExecutable=$candidate;break}}
+    foreach($candidate in $candidates){
+        if($candidate -eq (Join-Path $RuntimeDirectory 'ollama\ollama.exe') -and (Test-Path -LiteralPath (Join-Path $RuntimeDirectory 'downloads\extracting-ollama'))){continue}
+        if((Get-OllamaVersion $candidate) -ge [version]$lock.ollama.version){$OllamaExecutable=$candidate;break}
+    }
 }
 if((Get-OllamaVersion $OllamaExecutable) -lt [version]$lock.ollama.version){
     if($PSBoundParameters.ContainsKey('OllamaExecutable')){throw 'The selected Ollama executable must be version 0.32.0 or newer.'}
     $archive=Join-Path $RuntimeDirectory 'downloads\ollama-windows-amd64.zip'
     Get-Asset $lock.ollama.url $archive $lock.ollama.size_bytes $lock.ollama.sha256
     $portable=Join-Path $RuntimeDirectory 'ollama'
+    Set-ModelStatus 'extract' 'Ollama'
+    $extractMarker=Join-Path $RuntimeDirectory 'downloads\extracting-ollama'
+    [IO.File]::WriteAllText($extractMarker,'')
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip=[IO.Compression.ZipFile]::OpenRead($archive)
+    try{[IO.File]::WriteAllLines((Join-Path $RuntimeDirectory 'downloads\ollama-files.txt'),[string[]]@($zip.Entries | Where-Object Name | ForEach-Object FullName))}
+    finally{$zip.Dispose()}
     Expand-Archive -LiteralPath $archive -DestinationPath $portable -Force
     $OllamaExecutable=Join-Path $portable 'ollama.exe'
     if(-not(Test-Path -LiteralPath $OllamaExecutable)){throw 'The Ollama archive did not contain ollama.exe.'}
+    [IO.File]::Delete($extractMarker)
 }
 $vad=Join-Path $RuntimeDirectory 'vad\silero_vad.onnx'
 Get-Asset $lock.vad.url $vad $lock.vad.size_bytes $lock.vad.sha256
@@ -110,6 +135,7 @@ if($ApplicationDirectory -and -not $PSBoundParameters.ContainsKey('OllamaPort'))
 $oldHost=$env:OLLAMA_HOST;$oldModels=$env:OLLAMA_MODELS;$oldParallel=$env:OLLAMA_NUM_PARALLEL;$oldLoaded=$env:OLLAMA_MAX_LOADED_MODELS
 $script:ollamaUrl="http://127.0.0.1:$OllamaPort"
 $installerService=$null
+Set-ModelStatus 'start' 'Ollama'
 try{
     $env:OLLAMA_HOST="127.0.0.1:$OllamaPort"
     # The native GGUF tools can lose non-ASCII characters in absolute command-line paths.
@@ -138,6 +164,7 @@ try{
     }
     if(-not $ready){throw 'Ollama did not start. Check the runtime logs.'}
     if([version]($version.version -split '-')[0] -lt [version]$lock.ollama.version){throw 'The Ollama service on this port is too old. Update it or choose another -OllamaPort.'}
+    Set-ModelStatus 'import' 'Qwen3-ASR'
     foreach($file in $lock.asr.files){Import-Blob (Join-Path $RuntimeDirectory ('asr-models\'+$file.filename)) $file.sha256}
     Write-Host 'Importing ASR model and audio encoder...'
     # File.ReadAllText avoids PowerShell 5.1 provider metadata on Get-Content strings.
@@ -147,6 +174,7 @@ try{
     if($result.status -ne 'success'){throw 'ASR import did not complete.'}
     $modelfile=Join-Path (Split-Path -Parent $translation) 'Hy-MT2.Modelfile'
     Write-Host 'Importing translation model...'
+    Set-ModelStatus 'import' 'HY-MT2'
     Copy-Item -LiteralPath (Join-Path $resources 'Hy-MT2.Modelfile') -Destination $modelfile -Force
     & $OllamaExecutable create $lock.translation.model -f $modelfile
     Require-Success 'Translation import failed.'
@@ -174,7 +202,11 @@ try{
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $settingsPath) | Out-Null
 foreach($name in @('AsrUrl','WslDistribution','WslRuntimeDirectory')){$settings.PSObject.Properties.Remove($name)}
 foreach($entry in @{RuntimeDirectory=$RuntimeDirectory;AsrModel=$lock.asr.model;TranslationModel=$lock.translation.model;OllamaUrl=$ollamaUrl;OllamaExecutable=[IO.Path]::GetFullPath($OllamaExecutable)}.GetEnumerator()){$settings | Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value -Force}
-$settings | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $settingsPath -Encoding utf8
+Set-ModelStatus 'save'
+# A cancelled upgrade must leave the last saved preferences readable.
+$settingsTemp=$settingsPath+'.installing'
+[IO.File]::WriteAllText($settingsTemp,($settings | ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($true))
+if([IO.File]::Exists($settingsPath)){[IO.File]::Replace($settingsTemp,$settingsPath,[Management.Automation.Language.NullString]::Value)}else{[IO.File]::Move($settingsTemp,$settingsPath)}
 Set-Content -LiteralPath (Join-Path $appRoot 'runtime-path.txt') -Value $RuntimeDirectory -Encoding utf8
-if($ApplicationDirectory){Write-Host 'Models ready.'}
+if($ApplicationDirectory){Set-ModelStatus 'ready'; Write-Host 'Models ready.'}
 else{Write-Host "Installed. Open $appRoot\Start.cmd. Click Start and wait until ready before playing audio."}

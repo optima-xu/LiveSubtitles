@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>LiveSubtitles</AssemblyName>
-    <Version>0.4.1</Version>
+    <Version>0.4.2</Version>
     <Deterministic>true</Deterministic>
     <PathMap>$(MSBuildProjectDirectory)=/src/LiveSubtitles</PathMap>
     <ApplicationManifest>app.manifest</ApplicationManifest>

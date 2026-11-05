@@ -82,15 +82,18 @@ var
 function OwnsDesktopShortcut: Boolean;
 var
   Link: String;
-  Shell, Shortcut: Variant;
+  Shell, Folder, Item, Shortcut: Variant;
 begin
   Result := False;
   Link := ExpandConstant('{userdesktop}\LiveSubtitles.lnk');
   if FileExists(Link) then
     try
-      Shell := CreateOleObject('WScript.Shell');
-      Shortcut := Shell.CreateShortcut(Link);
-      Result := CompareText(Shortcut.TargetPath, ExpandConstant('{app}\app\LiveSubtitles.exe')) = 0;
+      { Explorer's link reader preserves Unicode paths on every Windows system locale. }
+      Shell := CreateOleObject('Shell.Application');
+      Folder := Shell.NameSpace(ExtractFileDir(Link));
+      Item := Folder.ParseName(ExtractFileName(Link));
+      Shortcut := Item.GetLink;
+      Result := CompareText(Shortcut.Path, ExpandConstant('{app}\app\LiveSubtitles.exe')) = 0;
     except
       Log(GetExceptionMessage);
     end;

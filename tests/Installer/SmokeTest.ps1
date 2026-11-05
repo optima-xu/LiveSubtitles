@@ -17,7 +17,7 @@ if (-not $ScratchDirectory) {
 $scratch = (Resolve-Path -LiteralPath $ScratchDirectory).Path.TrimEnd('\')
 $runName = 'LiveSubtitles-smoke-' + [Guid]::NewGuid().ToString('N')
 $testRoot = [IO.Directory]::CreateDirectory((Join-Path $scratch $runName)).FullName
-$destination = Join-Path $testRoot '自定义 目录 [x64]\LiveSubtitles'
+$destination = Join-Path $testRoot '自定义 目录 🧪 [x64]\LiveSubtitles'
 $target = Join-Path $destination 'app\LiveSubtitles.exe'
 $settingsFile = Join-Path $destination 'data\settings.json'
 $runtime = Join-Path $destination '.runtime'
@@ -36,9 +36,10 @@ function Invoke-SetupProcess([string]$Path, [string]$Options, [string]$LogName, 
 
 function Test-Shortcut([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing shortcut: $Path" }
-    $link = (New-Object -ComObject WScript.Shell).CreateShortcut($Path)
-    if ($link.TargetPath -ne $target -or $link.WorkingDirectory -ne (Split-Path -Parent $target)) {
-        throw "Incorrect shortcut target or working directory: $Path"
+    $folder = (New-Object -ComObject Shell.Application).NameSpace((Split-Path -Parent $Path))
+    $link = $folder.ParseName((Split-Path -Leaf $Path)).GetLink
+    if ($link.Path -ne $target -or $link.WorkingDirectory -ne (Split-Path -Parent $target)) {
+        throw "Incorrect shortcut $Path. Expected $target; found '$($link.Path)' in '$($link.WorkingDirectory)'."
     }
 }
 

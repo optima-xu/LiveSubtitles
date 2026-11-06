@@ -18,7 +18,21 @@ function Set-ModelStatus([string]$Stage,[string]$Item='',[long]$Size=0){
     if(-not $ProgressFile){return}
     $line=$Item -replace '[\r\n]+',' '
     $content="[model]`r`nstage=$Stage`r`nitem=$line`r`nsize=$Size`r`n"
-    [IO.File]::WriteAllText($ProgressFile,$content,[Text.Encoding]::Unicode)
+    # Publish a complete snapshot. Windows' INI reader can briefly lock the target.
+    $snapshot=$ProgressFile+'.writing'
+    [IO.File]::WriteAllText($snapshot,$content,[Text.Encoding]::Unicode)
+    for($attempt=0;$attempt -lt 40;$attempt++){
+        try{
+            if([IO.File]::Exists($ProgressFile)){
+                [IO.File]::Replace($snapshot,$ProgressFile,[Management.Automation.Language.NullString]::Value)
+            }else{[IO.File]::Move($snapshot,$ProgressFile)}
+            return
+        }catch [IO.IOException]{
+            $errorCode=$_.Exception.HResult -band 65535
+            if($errorCode -notin @(32,33) -or $attempt -eq 39){throw}
+            Start-Sleep -Milliseconds 25
+        }
+    }
 }
 trap {
     if($ProgressFile){Set-ModelStatus 'error' $_.Exception.Message; exit 1}

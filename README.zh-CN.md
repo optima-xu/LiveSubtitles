@@ -17,7 +17,7 @@
 
 需要 **64 位 Windows**，首次安装需联网，并预留至少 **12 GB 磁盘空间**。
 
-1. 从 [Releases](https://github.com/optima-xu/LiveSubtitles/releases/latest) 下载并打开 `LiveSubtitles-Setup-v0.4.2-windows-x64.exe`。
+1. 从 [Releases](https://github.com/optima-xu/LiveSubtitles/releases/latest) 下载并打开 `LiveSubtitles-Setup-v0.4.3-windows-x64.exe`。
 2. 选择安装目录，例如 `D:\Apps\LiveSubtitles`。全新安装时模型也会下载到该目录。桌面快捷方式默认勾选。
 3. 点击“安装”，向导会显示每个模型的下载进度并准备 Ollama。中途可以取消，下次选择同一目录即可续传。完成后，从开始菜单或桌面打开 **LiveSubtitles**。
 4. 选择输出设备和语言。**先点击“开始”，等待模型就绪，再播放电脑音频。**

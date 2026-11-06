@@ -47,7 +47,6 @@ public partial class MainWindow : Window
         services.Status += s => Ui(() => SetStatus(s));
         SourceInitialized += (_, _) => RegisterKeys();
         Closing += async (_, e) => { if (closing) return; e.Cancel = true; await ExitAsync(); };
-        StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) { Hide(); tray.Visible = true; } };
         tray.Text = "实时翻译字幕";
         using (var resource = Application.GetResourceStream(new Uri("pack://application:,,,/LiveSubtitles;component/Assets/livesubtitles.ico"))!.Stream)
         using (var icon = new System.Drawing.Icon(resource))

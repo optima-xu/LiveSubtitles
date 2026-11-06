@@ -98,6 +98,29 @@ try {
         if ($app.Path -ne $target -or -not $app.WaitForInputIdle(30000) -or $app.HasExited) {
             throw 'The desktop shortcut did not open the installed application.'
         }
+        Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class InstalledWindowCheck {
+    [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr window, int command);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+}
+'@
+        $app.Refresh()
+        $window = $app.MainWindowHandle
+        if ($window -eq [IntPtr]::Zero) { throw 'Installed application has no main window.' }
+        [void][InstalledWindowCheck]::ShowWindowAsync($window, 6)
+        Start-Sleep -Milliseconds 700
+        if ($app.HasExited -or -not [InstalledWindowCheck]::IsIconic($window) -or -not [InstalledWindowCheck]::IsWindowVisible($window)) {
+            throw 'Minimizing the application hid its taskbar window or exited the process.'
+        }
+        [void][InstalledWindowCheck]::ShowWindowAsync($window, 9)
+        Start-Sleep -Milliseconds 700
+        if ([InstalledWindowCheck]::IsIconic($window) -or -not [InstalledWindowCheck]::IsWindowVisible($window)) {
+            throw 'The minimized application could not be restored.'
+        }
+        Write-Host 'Installed application minimized and restored successfully.'
     } finally {
         if (-not $app.HasExited -and $app.Path -eq $target) {
             [void]$app.CloseMainWindow()

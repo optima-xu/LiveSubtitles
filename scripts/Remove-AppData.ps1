@@ -51,6 +51,10 @@ foreach ($model in @($lock.asr.model, $lock.translation.model)) {
     }
 }
 foreach ($file in @($lock.asr.files) + @($lock.translation)) { [void]$digests.Add($file.sha256) }
+# Ollama 0.32 first creates a stop-parameters layer, then merges temperature and
+# context parameters into another layer. The first layer is no longer in the manifest.
+# This exact digest identifies that intermediate layer from our ASR import.
+[void]$digests.Add('f02dd72bb2423204352eabc5637b44d79d17f109fdb510a7c51455892aa2d216')
 $manifests = Get-ManagedPath "$store\manifests"
 if ($manifests -and [IO.Directory]::Exists($manifests)) {
     $pending = [Collections.Generic.Stack[string]]::new()

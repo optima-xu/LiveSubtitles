@@ -28,7 +28,7 @@ function Set-ModelStatus([string]$Stage,[string]$Item='',[long]$Size=0){
             }else{[IO.File]::Move($snapshot,$ProgressFile)}
             return
         }catch [IO.IOException]{
-            $errorCode=$_.Exception.HResult -band 65535
+            $errorCode=$_.Exception.GetBaseException().HResult -band 65535
             if($errorCode -notin @(32,33) -or $attempt -eq 39){throw}
             Start-Sleep -Milliseconds 25
         }
